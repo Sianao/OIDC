@@ -66,11 +66,19 @@ func Entrance() {
 		UserGroup.DELETE("/order", hander.Auth(), controller.DeleteOrder)
 		//Post 提交评论
 		UserGroup.POST("/commit", hander.Auth(), controller.Commit)
+		//获取用户订阅信息
+		UserGroup.GET("/subscribe", hander.Auth(), controller.UserCategory)
+		//退订
+		UserGroup.DELETE("/subscribe", hander.Auth(), controller.UnSubscribe)
+		//用户获取信息
+		UserGroup.GET("/message", hander.Auth(), controller.GetInfo)
 	}
 	ShopCenter := r.Group("/shop")
 	{
 		//all 显示所有商品
 		ShopCenter.GET("/all", hander.Auth(), controller.AllShop)
+		//订阅评道
+		ShopCenter.POST("/subscribe", hander.Auth(), controller.Subscribe)
 		//commit 获取评论
 		ShopCenter.GET("/commit", hander.Auth(), controller.GetCommit)
 		//post 添加商品
@@ -90,21 +98,27 @@ func Entrance() {
 		//登录
 		admin.POST("/login", controller.RootLogin)
 		//展示所有订单 也写个分类吧
-		admin.GET("/order", hander.Auth(), controller.RootAll)
+		admin.Use(hander.Auth())
+		admin.Use(hander.RootAccess())
+		admin.GET("/order", controller.RootAll)
 		//更新订单
-		admin.PUT("/order", hander.Auth(), controller.UpdateONeOrder)
+		admin.PUT("/order", controller.UpdateONeOrder)
 		//删除订单
-		admin.DELETE("/order", hander.Auth(), controller.DeleteUserOrder)
+		admin.DELETE("/order", controller.DeleteUserOrder)
 		//增加商品
-		admin.POST("/goods", hander.Auth(), controller.AddGoods)
+		admin.POST("/goods", controller.AddGoods)
 		//获取商品
-		admin.GET("/goods", hander.Auth(), controller.AllShop)
+		admin.GET("/goods", controller.AllShop)
 		//更新商品信息
-		admin.PUT("/goods", hander.Auth(), controller.UpdateGoods)
+		admin.PUT("/goods", controller.UpdateGoods)
 		//删除商品
-		admin.DELETE("/goods", hander.Auth(), controller.DeleteGoods)
+		admin.DELETE("/goods", controller.DeleteGoods)
+		//添加订阅分类
+		admin.POST("/category", controller.AddCategory)
+		//所有分类
+		admin.GET("/category", controller.AllCategory)
 		//登出
-		admin.GET("/logout", hander.Auth(), controller.RootLogout)
+		admin.GET("/logout", controller.RootLogout)
 	}
 	r.Run(":8080")
 	//runtls 实现https 访问 用的是腾讯的ssl 证书 不存在爆红

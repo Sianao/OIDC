@@ -4,6 +4,10 @@ import (
 	"JD/models"
 	"JD/utils"
 	"os"
+	"strconv"
+	"sync"
+	"time"
+
 	// "JD/utils"
 	// "JD/utils"
 	// "JD/utils"
@@ -68,16 +72,30 @@ func GetAllOrder() (*models.AllInfo, error) {
 	return &AllInfo, nil
 }
 func OrderChange(order models.UpdateUserOrder) (string, error) {
-	stm, err := DB.Prepare("update user_order set state =? where oid=?")
+	stm, err := DB.Prepare("select uid from user_order where oid=?")
+	if err != nil {
+		return "", err
+	}
+	var uid int
+	row, _ := stm.Query(order.Oid)
+	for row.Next() {
+		row.Scan(&uid)
+	}
+	utils.AddCategory(strconv.Itoa(order.Oid))
+	utils.Subscribe(uid, strconv.Itoa(order.Oid))
+	stm, err = DB.Prepare("update user_order set state =? where oid=?")
 	if err != nil {
 		err = errors.New("操作失败")
 		return "", err
 	}
 	_, err = stm.Exec(order.State, order.Oid)
 	if err != nil {
+
 		err = errors.New("操作失败")
 		return "", err
 	}
+	t := time.Now()
+	utils.AddNewInfo(strconv.Itoa(order.Oid), "订单状态变化", "您的订单状态发生变化", t)
 	return "操作成功", nil
 }
 func DeleteUserOrder(update models.UpdateUserOrder) (string, error) {
@@ -155,6 +173,13 @@ func AddGoods(goods models.GoodsAdd, c *gin.Context) (string, error) {
 
 }
 func UpdateGoods(goods models.UpdateGoods, c *gin.Context) (string, error) {
+	s := sync.WaitGroup{}
+	s.Add(1)
+	go func() {
+		t := time.Now()
+		utils.AddNewInfo(strconv.Itoa(goods.Gid), "商品信息修改", "您关注的商品信息发生变动", t)
+		s.Done()
+	}()
 	tx, err := DB.Begin()
 	if err != nil {
 		err = errors.New("数据更新失败 请稍后重试")
@@ -202,6 +227,7 @@ func UpdateGoods(goods models.UpdateGoods, c *gin.Context) (string, error) {
 			tx.Rollback()
 			return "", err
 		}
+		s.Wait()
 	}
 	if goods.Gname != "" {
 		stm, err := tx.Prepare("update goods_list set name =? where Gid=?")

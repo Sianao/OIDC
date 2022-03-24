@@ -13,7 +13,7 @@ func Service(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	utils.HashSet(re)
+	utils.JsonSet(re)
 	c.Redirect(http.StatusMovedPermanently, "http://localhost:8080/login?client_id="+re.ClientId+"&state="+re.State)
 }
 func RedirectService() {

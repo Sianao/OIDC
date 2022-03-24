@@ -3,27 +3,23 @@ package controller
 import (
 	"JD/dao"
 	"JD/models"
+	"JD/service"
 	"JD/utils"
 	"errors"
 	"github.com/gin-gonic/gin"
+	"time"
 )
 
 func RootLogin(c *gin.Context) {
 	var admin models.Admin
 	err := c.ShouldBind(&admin)
 	if err != nil {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   "参数绑定失败",
-		})
+		service.ErrorReturn(c, "参数绑定失败")
 	}
 	ok, state := dao.AdminLogin(admin.Name, admin.Password)
 
 	if !ok {
-		c.JSON(200, gin.H{
-			"state": ok,
-			"msg":   state,
-		})
+		service.ErrorReturn(c, state)
 		return
 	}
 	var BasicInfo models.BasicInfo
@@ -32,14 +28,11 @@ func RootLogin(c *gin.Context) {
 	token := utils.MakeToken(BasicInfo)
 	ok = utils.SetToken(1, token)
 	if !ok {
-		c.JSON(20, gin.H{
-			"state": false,
-			"msg":   "登录失败",
-		})
+		service.ErrorReturn(c, "登录失败")
 		return
 
 	}
-	c.JSON(200, gin.H{
+	service.NormalReturn(c, gin.H{
 		"code":  ok,
 		"msg":   state,
 		"token": token,
@@ -51,273 +44,109 @@ func RootLogout(c *gin.Context) {
 	Authorization := c.Request.Header.Get("Authorization")
 	ok := utils.DeleteToken(Authorization)
 	if !ok {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   "退出登录失败",
-		})
+		service.ErrorReturn(c, "推出登录失败")
 		return
 	}
-	c.JSON(200, gin.H{
-		"state": true,
-		"msg":   "退出登录成功",
-	})
+	service.NormalReturn(c, "退出登录成功")
 	return
 }
 func RootAll(c *gin.Context) {
-	Info, exist := c.Get("Info")
-	if !exist {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   "参数缺失",
-		})
-	}
-	BasicInfo, err := utils.Transform(Info)
-	if err != nil {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   err.Error(),
-		})
-		return
-	}
-	if BasicInfo.Uid != 0 {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   "权限不够",
-		})
-		return
-	}
 	Allorder, err := dao.GetAllOrder()
 	if err != nil {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   err.Error(),
-		})
+		service.ErrorReturn(c, err.Error())
 		return
 	}
-	c.JSON(200, gin.H{
-		"state": true,
-		"msg":   *Allorder,
-	})
-
+	service.NormalReturn(c, *Allorder)
+	return
 }
 func UpdateONeOrder(c *gin.Context) {
 	var update models.UpdateUserOrder
-	Info, exist := c.Get("Info")
-	if !exist {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   "参数缺失",
-		})
-	}
-	BasicInfo, err := utils.Transform(Info)
+	err := c.ShouldBind(&update)
 	if err != nil {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   err.Error(),
-		})
+		service.ErrorReturn(c, "参数绑定错误")
 		return
-	}
-	if BasicInfo.Uid != 0 {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   "权限不够",
-		})
-		return
-	}
-	err = c.ShouldBind(&update)
-	if err != nil {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   err.Error(),
-		})
 	}
 	msg, err := dao.OrderChange(update)
 	if err != nil {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   err.Error(),
-		})
+		service.ErrorReturn(c, err.Error())
 		return
 	}
-	c.JSON(200, gin.H{
-		"state": true,
-		"msg":   msg,
-	})
+	service.NormalReturn(c, msg)
 	return
 }
 func DeleteUserOrder(c *gin.Context) {
 	var update models.UpdateUserOrder
-	Info, exist := c.Get("Info")
-	if !exist {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   "参数缺失",
-		})
-	}
-	BasicInfo, err := utils.Transform(Info)
+	err := c.ShouldBind(&update)
 	if err != nil {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   err.Error(),
-		})
-		return
-	}
-	if BasicInfo.Uid != 0 {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   "权限不够",
-		})
-		return
-	}
-	err = c.ShouldBind(&update)
-	if err != nil {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   err.Error(),
-		})
+		service.ErrorReturn(c, "参数绑定失败")
 	}
 	msg, err := dao.DeleteUserOrder(update)
 	if err != nil {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   err.Error(),
-		})
+		service.ErrorReturn(c, err.Error())
 		return
 	}
-	c.JSON(200, gin.H{
-		"state": true,
-		"msg":   msg,
-	})
+	service.NormalReturn(c, msg)
+	return
 }
 func AddGoods(c *gin.Context) {
 	var add models.GoodsAdd
-	Info, exist := c.Get("Info")
-	if !exist {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   "参数缺失",
-		})
-	}
-	BasicInfo, err := utils.Transform(Info)
+	err := c.ShouldBind(&add)
 	if err != nil {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   err.Error(),
-		})
-		return
-	}
-	if BasicInfo.Uid != 0 {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   "权限不够",
-		})
-		return
-	}
-	err = c.ShouldBind(&add)
-	if err != nil {
+
 		err = errors.New("参数绑定失败")
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   err.Error(),
-		})
+		service.ErrorReturn(c, err.Error())
 		return
 	}
+	t := time.Now()
+	utils.AddNewInfo(add.Category, "商品发布", "您关注的分类发布了新的商品", t)
 	msg, err := dao.AddGoods(add, c)
 	if err != nil {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   err.Error(),
-		})
+		service.ErrorReturn(c, err.Error())
 		return
 	}
-	c.JSON(200, gin.H{
-		"state": false,
-		"msg":   msg,
-	})
+	service.NormalReturn(c, msg)
+	return
 }
 
 func UpdateGoods(c *gin.Context) {
 	var update models.UpdateGoods
-	Info, exist := c.Get("Info")
-	if !exist {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   "参数缺失",
-		})
-	}
-	BasicInfo, err := utils.Transform(Info)
-	if err != nil {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   err.Error(),
-		})
-		return
-	}
-	if BasicInfo.Uid != 0 {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   "权限不够",
-		})
-		return
-	}
-	err = c.ShouldBind(&update)
+	err := c.ShouldBind(&update)
 	if err != nil {
 		err = errors.New("参数绑定失败")
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   err.Error(),
-		})
-		return
+		service.ErrorReturn(c, err.Error())
 	}
 	msg, err := dao.UpdateGoods(update, c)
 	if err != nil {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   err.Error(),
-		})
+		service.ErrorReturn(c, err.Error())
 		return
 	}
-	c.JSON(200, gin.H{
-		"state": true,
-		"msg":   msg,
-	})
+	service.NormalReturn(c, msg)
+	return
 }
 func DeleteGoods(c *gin.Context) {
 	Gid := c.PostForm("Gid")
-	Info, exist := c.Get("Info")
-	if !exist {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   "参数缺失",
-		})
-	}
-	BasicInfo, err := utils.Transform(Info)
-	if err != nil {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   err.Error(),
-		})
-		return
-	}
-	if BasicInfo.Uid != 0 {
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   "权限不够",
-		})
-		return
-	}
 	msg, err := dao.DeleteGoods(Gid)
 	if err != nil {
-
-		c.JSON(200, gin.H{
-			"state": false,
-			"msg":   err.Error(),
-		})
+		service.ErrorReturn(c, err.Error())
 		return
 	}
-	c.JSON(200, gin.H{
-		"state": true,
-		"msg":   msg,
-	})
+	service.NormalReturn(c, msg)
+	return
+
+}
+func AddCategory(c *gin.Context) {
+	category := c.PostForm("category")
+	err := utils.AddCategory(category)
+	if err != nil {
+		service.ErrorReturn(c, err.Error())
+		return
+	}
+	service.NormalReturn(c, "添加成功")
+	return
+}
+func AllCategory(c *gin.Context) {
+	all := utils.AllCategory()
+	service.NormalReturn(c, all)
+	return
 
 }

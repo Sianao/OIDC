@@ -75,7 +75,7 @@ func Sendsms(Number string) error {
 		}
 	}
 
-	SetConform(Number, code)
+	SmsConform(Number, code)
 
 	return nil
 }
