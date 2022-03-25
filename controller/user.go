@@ -264,3 +264,22 @@ func UnSubscribe(c *gin.Context) {
 	return
 
 }
+func MarkReaded(c *gin.Context) {
+	msid := c.PostForm("msid")
+	Info, exist := c.Get("Info")
+	if !exist {
+		service.ErrorReturn(c, "参数缺失")
+	}
+	BasicInfo, err := utils.Transform(Info)
+	if err != nil {
+		service.ErrorReturn(c, err.Error())
+		return
+	}
+	ok := utils.MarkReaded(BasicInfo.Uid, msid)
+	if ok {
+		service.NormalReturn(c, "已读")
+		return
+	}
+	service.ErrorReturn(c, "标为已读失败")
+
+}

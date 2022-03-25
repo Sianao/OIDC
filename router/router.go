@@ -72,6 +72,7 @@ func Entrance() {
 		UserGroup.DELETE("/subscribe", hander.Auth(), controller.UnSubscribe)
 		//用户获取信息
 		UserGroup.GET("/message", hander.Auth(), controller.GetInfo)
+		UserGroup.POST("/readed", hander.Auth(), controller.MarkReaded)
 	}
 	ShopCenter := r.Group("/shop")
 	{

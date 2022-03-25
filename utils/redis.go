@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gomodule/redigo/redis"
+	"strconv"
 	"time"
 )
 
@@ -120,10 +121,11 @@ func NewInfo(Info models.ChangeMessage) {
 	fmt.Println(member, "fewfrwg")
 	for _, v := range member {
 		value, ok := v.([]byte)
-		fmt.Println(ok)
-		if ok {
-			AddInfo(string(value), Info)
+		for _, v := range value {
+			AddInfo(int(v), Info)
 		}
+		fmt.Println(ok)
+
 	}
 
 }
@@ -135,11 +137,12 @@ func AddNewInfo(category string, types string, info string, time time.Time) {
 	s.Time = time
 	NewInfo(s)
 }
-func AddInfo(uid string, Info models.ChangeMessage) bool {
+func AddInfo(uid int, Info models.ChangeMessage) bool {
 	c := RedisPool.Get()
 	defer c.Close()
+	Info.Msid = strconv.FormatInt(time.Now().Unix(), 10)
 	Json, _ := json.Marshal(Info)
-	ok, err := redis.Bool(c.Do("SADD", uid, Json))
+	ok, err := redis.Bool(c.Do("HMSET", byte(uid), Info.Msid, Json))
 	if err != nil || !ok {
 		return false
 	}
@@ -160,24 +163,24 @@ func GetInfo(Uid int) []models.ChangeMessage {
 	c := RedisPool.Get()
 	defer c.Close()
 	var Allinfo []models.ChangeMessage
-	all, err := redis.Values(c.Do("SMEMBERS", Uid))
+	all, err := redis.Values(c.Do("HKEYS", Uid))
 	if err != nil {
 		fmt.Println(err)
 		return nil
 	}
-	fmt.Println(all, "fd")
 	var message models.ChangeMessage
 	for _, v := range all {
 		s, ok := v.([]byte)
-		fmt.Println(ok)
-		err := json.Unmarshal(s, &message)
+		fmt.Println(s, ok)
+		info, err := redis.String(c.Do("HGET", Uid, s))
+		err = json.Unmarshal([]byte(info), &message)
 		fmt.Println(err)
 		if err != nil {
 		} else {
 			Allinfo = append(Allinfo, message)
-
 		}
 	}
+
 	return Allinfo
 
 }
@@ -197,13 +200,15 @@ func AddCategory(category string) error {
 	}
 	return nil
 }
+
+//显示所有订阅的分类
+
 func AllCategory() []string {
 	c := RedisPool.Get()
 	defer c.Close()
 	values, err := redis.Values(c.Do("SMEMBERS", "all"))
 	var all []string
 	fmt.Println(err)
-	fmt.Println(values, "fje")
 	for _, v := range values {
 		value, ok := v.([]byte)
 		fmt.Println(ok)
@@ -238,4 +243,13 @@ func Unsubscribe(uid int, category string) error {
 		return err
 	}
 	return nil
+}
+func MarkReaded(uid int, msid string) bool {
+	c := RedisPool.Get()
+	defer c.Close()
+	ok, err := redis.Bool(c.Do("HDEL", []byte(string(uid)), msid))
+	if err != nil || !ok {
+		return false
+	}
+	return ok
 }
