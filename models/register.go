@@ -1,10 +1,10 @@
 package models
 
 type Register struct {
-	Username string `form:"username"  binding:"required" json:"username,omitempty"`
-	Password string `form:"password"  binding:"required" json:"password,omitempty"`
-	Code     string `form:"code"  binding:"required" json:"code,omitempty"`
-	Number   string `form:"number"  binding:"required" json:"number,omitempty"`
+	Username string `form:"username"  binding:"required" json:"username,omitempty" gorm:"column:name"`
+	Password string `form:"password"  binding:"required" json:"password,omitempty" gorm:"column:word"`
+	Code     string `form:"code"  binding:"required" json:"code,omitempty" gorm:"-"`
+	Number   string `form:"number"  binding:"required" json:"number,omitempty" gorm:"column:number"`
 }
 type Login struct {
 	Username string `form:"username" json:"username,omitempty" binding:"required"`

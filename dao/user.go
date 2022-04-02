@@ -2,261 +2,190 @@ package dao
 
 import (
 	"JD/models"
-	"database/sql"
 	"errors"
-	"fmt"
+	"gorm.io/gorm"
 	"os"
 )
 
-func Register(name string, word string, number string) error {
+func Register(name string, _ string, number string) error {
 	var U models.Register
-	stm, err := DB.Prepare("select  name from user_info where name = ?")
-	if err != nil {
-		err = errors.New("注册失败")
+	//查看用户是否存在
+	result := DB.Table("user_info").Where(&models.Register{
+		Username: name,
+	}).Or(&models.Register{
+		Number: number,
+	}).Find(&models.Register{})
+	if result.RowsAffected != 0 {
+		err := errors.New("用户已存在 请尝试登录")
 		return err
 	}
-	defer stm.Close()
-	rows, err := stm.Query(&name)
-	if err != nil {
-		err = errors.New("注册失败")
+	if result.Error != nil {
+		err := errors.New("注册失败 待会儿再试试吧")
 		return err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		rows.Scan(&U.Username)
-		if name == U.Username {
-			err = errors.New("用户名已存在 要不登录试试")
-			return err
-		}
-	}
-	stm, err = DB.Prepare("select  number from user_info where number = ?")
-	if err != nil {
-		err = errors.New("注册失败")
+	//执行注册
+	result = DB.Table("user_info").Create(&U)
+	if result.Error != nil {
+		err := errors.New("注册失败 待会儿再试试吧")
 		return err
 	}
-	defer stm.Close()
-	rows, err = stm.Query(&number)
-	if err != nil {
-		err = errors.New("注册失败")
-		return err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		rows.Scan(&U.Username)
-		if number == U.Username {
-			err = errors.New("手机号已注册")
-			return err
-		}
-	}
-	stm, err = DB.Prepare("insert into user_info(name,word,number) values(?,?,?);")
-	if err != nil {
-		err = errors.New("注册失败")
-		return err
-	}
-	_, err = stm.Exec(name, word, number)
-	if err != nil {
-		err = errors.New("注册失败")
-		return err
-	}
+
 	return nil
 
 }
+
+type User models.Register
+
+func (User) TableName() string {
+	return "user_info"
+}
 func Find(user models.Register) error {
-	stm, err := DB.Prepare("select word ,number from user_info where name=?")
-	if err != nil {
-		err = errors.New("账户找回失败")
-		return err
-	}
-	var temple models.Register
-	err = stm.QueryRow(user.Username).Scan(&temple.Password, &temple.Number)
-	if err != nil {
-		err = errors.New("账户找回失败")
+	var temple User
+	result := DB.Where(&User{
+		Username: user.Username,
+	}).Find(&temple)
+	// 进行检测是否傻逼操作
+
+	if result.Error != nil || result.RowsAffected == 0 {
+		err := errors.New("找回密码失败 用户信息不存在")
 		return err
 	}
 	if temple.Number != user.Number {
-		err = errors.New("手机号不匹配，再试试把")
+		err := errors.New("手机号不匹配，再试试把")
 		return err
 	}
 	if temple.Password == user.Password {
-		err = errors.New("密码不能和原来的相同哦")
+		err := errors.New("密码不能和原来的相同哦")
 		return err
 	}
-	stm, err = DB.Prepare("update user_info set word =? where name =?")
-	if err != nil {
-		err = errors.New("账号找回失败")
-	}
-	_, err = stm.Exec(user.Password, user.Username)
-	if err != nil {
-		err = errors.New("账号找回失败")
-		return err
-	}
+	// 更新密码
+
+	DB.Model(&models.Register{}).Where(&models.Register{
+		Username: user.Username,
+	}).Updates(user.Password)
+
 	return nil
 
 }
-func HubLogin(user models.HubBasicInfo) (models.BasicInfo, error) {
-	stm, err := DB.Prepare("select uid ,name from user_info where hub_id=?")
-	var info models.BasicInfo
 
-	if err != nil {
-		err := errors.New("登录失败")
-		return info, err
-	}
-	row, err := stm.Query(user.ID)
-	for row.Next() {
-		err = row.Scan(&info.Uid, info.Username)
-		if err == sql.ErrNoRows {
-			err = errors.New("该用户未注册")
-			return info, err
-		}
-	}
-	return info, nil
-}
 func Login(u models.Login) (*models.BasicInfo, error) {
-	stm, err := DB.Prepare("select uid, word from user_info where name = ?")
-	if err != nil {
-		fmt.Println(err)
-		err = errors.New("登录失败")
+	var info models.UserInfo
+	if result := DB.Table("user_info").Where(&models.Register{Username: u.Username}).Find(&info); result.Error != nil {
+		if result.RowsAffected == 0 {
+			err := errors.New("你还没注册登录个屁")
+			return nil, err
+		}
+		err := errors.New("登录失败")
 		return nil, err
 	}
-	defer stm.Close()
-	var basicinfo models.BasicInfo
-	rows, err := stm.Query(u.Username)
-	if err != nil {
-		fmt.Println(err)
-		err = errors.New("登录失败")
-		return nil, err
-	}
-	var tmp models.Login
-	defer rows.Close()
-	for rows.Next() {
-		rows.Scan(&basicinfo.Uid, &tmp.Password)
-	}
-	if tmp.Password == "" {
-		err = errors.New("你还没注册登录个屁")
-		return nil, err
-	}
-	if tmp.Password != u.Password {
-		err = errors.New("密码错误")
+	if info.Word != u.Password {
+		err := errors.New("密码错误")
 		return nil, err
 
 	}
-	basicinfo.Username = u.Username
+	//返回
+	var basicinfo models.BasicInfo
+	basicinfo.Uid = info.Uid
+	basicinfo.Username = info.Name
 	return &basicinfo, nil
 }
 func AdminLogin(name string, word string) (bool, string) {
-	stm, err := DB.Prepare("select  word from admin_info where name = ?")
-	if err != nil {
+	type admin struct {
+		name string
+		word string
+	}
+	var admins admin
+	if result := DB.Table("admin_info").Where("name=?", name).Find(&admins); result.Error != nil || result.RowsAffected == 0 {
+		if result.RowsAffected == 0 {
+			return false, "用户不存在"
+		}
 		return false, "登录失败"
 	}
-	rows, err := stm.Query(name)
-	if err != nil {
-		return false, "登录失败"
-	}
-	var s string
-	for rows.Next() {
-		rows.Scan(&s)
-	}
-	if s != word {
+	if admins.word != word {
 		return false, "密码错误"
 	}
 	return true, "密码正确"
 
 }
 
+type Userinfo models.UserInfo
+
+// TableName 修改表明
+func (Userinfo) TableName() string {
+	return "user_info"
+}
 func SaveFile(url string, user models.BasicInfo) (string, error) {
-	stm, err := DB.Prepare("select image from user_info where uid=?")
-	if err != nil {
-		err := errors.New("文件上传失败")
-		return "", err
-	}
-	var link string
-	err = stm.QueryRow(user.Uid).Scan(&link)
-	if link == "default.png" {
+	var info Userinfo
+	DB.Where(&Userinfo{
+		Name: user.Username,
+		Uid:  user.Uid,
+	}).Find(&info)
+	//查询用户头像是否是默认头像
+	if info.Image == "default.png" {
 
 	} else {
-		err = os.Remove("./static/" + link)
+		err := os.Remove("./static/" + info.Image)
+		if err != nil {
+
+		}
 	}
-	stm, err = DB.Prepare("update user_info set image=? where uid=? ")
-	if err != nil {
-		err := errors.New("文件上传失败")
-		return "", err
-	}
-	_, err = stm.Exec(url, user.Uid)
-	if err != nil {
+	result := DB.Where(&Userinfo{
+		Name: user.Username,
+		Uid:  user.Uid,
+	}).Updates(&Userinfo{
+		Image: url,
+	})
+
+	if result.Error != nil {
 		err := errors.New("文件上传失败")
 		return "", err
 	}
 	return "文件上传成功", nil
 }
 
-func GetBalance(u string) (*float64, error) {
-	stm, err := DB.Prepare("select  balance from user_info where name = ?")
-	if err != nil {
-		err = errors.New("查找失败")
-		return nil, err
-	}
-	defer stm.Close()
-	rows, err := stm.Query(u)
-	if err != nil {
-		err = errors.New("查找失败")
-		return nil, err
-		//return false, "查找失败"
-		//return false, "查找失败"
-	}
-	var tmp float64
-	for rows.Next() {
-		rows.Scan(&tmp)
-	}
+func GetBalance(u models.BasicInfo) (*float64, error) {
 
-	return &tmp, nil
+	var info Userinfo
+	result := DB.Where(&Userinfo{
+		Name: u.Username,
+		Uid:  u.Uid,
+	}).Find(&info)
+	if result.Error != nil || result.RowsAffected == 0 {
+		err := errors.New("查询失败 无匹配信息")
+		return nil, err
+	}
+	return &info.Balance, nil
 
 }
 func ChargeBalance(u models.Balance) (bool, string) {
-	stm, err := DB.Prepare("select balance from user_info where uid=?")
-	if err != nil {
-		return false, "充值失败"
-	}
-	var balance float64
-	err = stm.QueryRow(u.Uid).Scan(&balance)
-	balance += u.Balance
-	stm, err = DB.Prepare("update user_info set balance=? where name=?")
-	if err != nil {
-		return false, "充值失败"
-	}
-	_, err = stm.Exec(balance, u.Username)
-	if err != nil {
+	//充值
+
+	result := DB.Where(&Userinfo{
+		Uid:  u.Uid,
+		Name: u.Username,
+	}).Update("balance", gorm.Expr("balance+?", u.Balance))
+	if result.RowsAffected == 0 || result.Error != nil {
 		return false, "充值失败"
 	}
 	return true, "充值成功"
 }
+
 func AddChart(chart models.AddChart) (string, error) {
-	stm, err := DB.Prepare("select gid from shop_chart where uid=?")
-	if err != nil {
-		err := errors.New("操作失败")
+	var all []models.ChartShop
+	//查看是否重复
+	result := DB.Table("shop_chart").Where("uid=? and gid=?", chart.Uid, chart.Gid).Find(&all)
+	if result.RowsAffected != 0 {
+		err := errors.New("你已经加入老人购物车 想干啥")
 		return "", err
 	}
-	var Temple models.AddChart
-	rows, err := stm.Query(chart.Uid)
-	for rows.Next() {
-		rows.Scan(&Temple.Gid)
-		if Temple.Gid == chart.Gid {
-			err := errors.New("已经加入购物车了 试试别的吧")
-			return "", err
-			//return false,
-		}
-	}
-
-	stm, err = DB.Prepare(" insert into shop_chart(uid,gid,count) values(?,?,?)")
-	if err != nil {
-
-		err := errors.New("操作失败")
-
-		return "", err
-	}
-	_, err = stm.Exec(chart.Uid, chart.Gid, chart.Count)
-	if err != nil {
-		err := errors.New("操作失败")
-
+	//插入数据
+	result = DB.Table("shop_chart").Create(&models.AddChart{
+		Uid:   chart.BasicInfo.Uid,
+		Gid:   chart.Gid,
+		Count: chart.Count,
+	})
+	if result.RowsAffected == 0 {
+		err := errors.New("加入购物车失败")
 		return "", err
 	}
 	return "你的宝贝已经躺在购物车里了哦", nil
@@ -264,24 +193,19 @@ func AddChart(chart models.AddChart) (string, error) {
 }
 func AllChart(user models.Userinfo) (*models.AllChart, error) {
 	all := models.AllChart{}
+	var T []models.ChartShop
+	result := DB.Table("shop_chart").Where("uid=?", user.Uid).Find(&T)
 	all.BasicInfo = user.BasicInfo
-	stm, err := DB.Prepare("select chart_id,gid,count from shop_chart where uid=? ")
-	if err != nil {
-		err = errors.New("查询失败")
+	if result.Error != nil {
+		err := errors.New("查询失败")
 		return nil, err
 	}
-	rows, err := stm.Query(all.Uid)
-	if err != nil {
-		err = errors.New("查询失败")
-		return nil, err
+	// 本来准备丢sql循环 这样不好的 最后还是丢进去了 可能因为数据库结构不合理吧
+
+	for k, v := range T {
+		DB.Table("goods_list").Select("Name").Where("Gid =?", v.Gid).Scan(&T[k].Good)
 	}
-	Templevalue := models.ChartShop{}
-	for rows.Next() {
-		rows.Scan(&Templevalue.ChartId, &Templevalue.Gid, &Templevalue.Count)
-		stm, err = DB.Prepare("select name from goods_list where Gid=? ")
-		err = stm.QueryRow(Templevalue.Gid).Scan(&Templevalue.Good)
-		all.ChartList = append(all.ChartList, Templevalue)
-	}
+	all.ChartList = T
 	return &all, nil
 
 }
@@ -291,135 +215,64 @@ func UpdateChart(chart models.ShopChart) (bool, string) {
 	if chart.Count == 0 {
 
 		//查看数据是否合法
-		stm, err := DB.Prepare("select uid  from shop_chart where chart_id=? ")
-		var Temple models.ShopChart
-		err = stm.QueryRow(chart.ChartId).Scan(&Temple.Uid)
-		if err != nil {
+		var OneChart int
+		result := DB.Table("shop_chart").Where("chart_id=?", chart.ChartId).Select("uid").Scan(&OneChart)
+		if result.Error != nil {
 			return false, "失败 呜呜呜"
 		}
-		if Temple.Uid != chart.Uid {
+		if OneChart != chart.Uid {
 			return false, "你怎么能动别人的订单呢"
 		}
-
-		stm, err = DB.Prepare("delete from shop_chart where chart_id=?")
-		if err != nil {
+		result = DB.Table("shop_chart").Where("chart_id=?", chart.ChartId).Delete(models.ChartShop{})
+		if result.Error != nil {
 			return false, "失败 呜呜  呜"
 
 		}
-		_, err = stm.Exec(chart.ChartId)
-		if err != nil {
-			return false, "失败呜呜呜"
 
-		}
 		return true, "宝贝忍痛离开了购物车"
 
 	}
-	stm, err := DB.Prepare("select uid  from shop_chart where chart_id=? ")
 	var Temple models.ShopChart
-	row, err := stm.Query(chart.ChartId)
-	for row.Next() {
-		err = row.Scan(&Temple.Uid)
-	}
-	if err != nil {
+	result := DB.Table("shop_chart").Where("chart_id=?", chart.ChartId).Find(&Temple)
+	if result.Error != nil || result.RowsAffected == 0 {
 		return false, "失败  没有查到该订单"
 	}
 	if Temple.Uid != chart.Uid {
 		return false, "你怎么能动别人的订单呢"
 	}
-	stm, err = DB.Prepare("update shop_chart set Count =?  where chart_id=? ")
-	if err != nil {
+	result = DB.Table("shop_chart").Update("Count=?", chart.Count)
+	if result.Error != nil {
 		return false, "失败 怎那么就失败呢"
-	}
-	_, err = stm.Exec(chart.Count, chart.ChartId)
-	if err != nil {
-		return false, "失败 怎么就是白呢"
 	}
 	return true, "操作成功"
 }
 
 func MyInfo(User models.BasicInfo) (*models.MyInfo, error) {
+
 	var UserInfo models.MyInfo
 	UserInfo.BasicInfo = User
-
-	stm, err := DB.Prepare("select balance ,image from user_info where uid=?")
-	if err != nil {
-		err = errors.New("个人信息读取错误")
-		return nil, err
-	}
-	var tmp models.MyInfo
-	rows, err := stm.Query(User.Uid)
-	err = stm.QueryRow(User.Uid).Scan(&UserInfo.Balance, &UserInfo.ImageUrl)
-	if err != nil {
-		err = errors.New("个人信息读取错误")
-		return nil, err
-	}
-	for rows.Next() {
-		err = rows.Scan(&tmp.Balance, &tmp.ImageUrl)
-		if err != nil {
-			err = errors.New("个人信息读取错误")
-			return nil, err
-		}
-		UserInfo = tmp
-	}
+	//查询用户基本信息
+	DB.Table("user_info").Where(&models.UserInfo{
+		Uid: User.Uid,
+	}).Select("balance,image").Scan(&UserInfo)
 	var link = "https://sanser.ltd/static/"
 
-	UserInfo.ImageUrl = link + tmp.ImageUrl
-	stm, err = DB.Prepare("select State from Order_state_type ")
-	if err != nil {
-		err = errors.New("个人信息读取错误")
-		return nil, err
-	}
-	rows, err = stm.Query()
-	if err != nil {
-		err = errors.New("个人信息读取错误")
-		return nil, err
-	}
-	var Category models.Category
-	for rows.Next() {
-		err = rows.Scan(&Category.State)
-		if err != nil {
-			err = errors.New("个人信息读取错误")
-			return nil, err
-		}
-		UserInfo.Category = append(UserInfo.Category, Category)
-	}
-	stm, err = DB.Prepare("select gid ,oid ,state,count from user_order where uid =? and state=? ")
+	UserInfo.ImageUrl += link
+	var Category []models.Category
+	//查询用户订单
+	DB.Table("order_state_type").Find(&Category)
+	UserInfo.Category = Category
 	var temple models.AllOrder
+	//对订单进行归入
 	for key, value := range UserInfo.Category {
-		rows, err = stm.Query(User.Uid, value.State)
-		if err != nil {
-			err = errors.New("个人信息读取错误")
-			return nil, err
-		}
-		for rows.Next() {
-			err = rows.Scan(&temple.Gid, &temple.Oid, &temple.State, &temple.Count)
-			if err != nil {
-				err = errors.New("个人信息读取错误")
-				return nil, err
-			}
-			UserInfo.Category[key].Order = append(UserInfo.Category[key].Order, temple)
-		}
+		DB.Table("user_order").Where("uid=? and state=?", User.Uid, value.State).Find(&temple)
+		UserInfo.Category[key].Order = append(UserInfo.Category[key].Order, temple)
 	}
 	UserInfo.BasicInfo = User
-
 	return &UserInfo, nil
 }
 func IdInfo(id int) (models.IdToken, error) {
 	var idtoken models.IdToken
-	stm, err := DB.Prepare("select name ,number ,balance ,image from user_info where uid =?")
-	if err != nil {
-		return idtoken, err
-	}
-	row, err := stm.Query(id)
-	if err != nil {
-		return idtoken, err
-
-	}
-	for row.Next() {
-		err := row.Scan(&idtoken.User, &idtoken.Phone, &idtoken.Balance, &idtoken.ImageUrl)
-		if err != nil {
-			return idtoken, err
-		}
-	}
+	DB.Where("uid=?", id).Find(&idtoken)
 	return idtoken, nil
 }

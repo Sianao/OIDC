@@ -1,14 +1,14 @@
 package models
 
 type AllShop struct {
-	All []Type
+	All []OrmClass
 }
 type Type struct {
 	Type  string
 	Goods []Info
 }
-type UserAllGoods struct {
-	All []Info
+type AllGoos struct {
+	Goods []OrmGoodsLIst
 }
 type Info struct {
 	GoodsBasicInfo
@@ -36,9 +36,10 @@ type UpdateOrder struct {
 	Oid int `json:"oid,omitempty" form:"oid"`
 }
 type AddChart struct {
-	BasicInfo
-	Gid   int `json:"gid,omitempty" form:"gid" `
-	Count int `json:"count,omitempty" form:"count"`
+	BasicInfo `gorm:"-"`
+	Uid       int
+	Gid       int `json:"gid,omitempty" form:"gid" `
+	Count     int `json:"count,omitempty" form:"count"`
 }
 
 // ShopChart 用于加入购车
@@ -59,10 +60,10 @@ type AllChart struct {
 
 //后端生成订单所需信息
 type ChartShop struct {
-	ChartId int
+	ChartId int `gorm:"column:chart_id"`
 	Gid     int
-	Good    string
-	Count   string
+	Good    string `gorm:"-"`
+	Count   string `gorm:"count"`
 }
 
 // 用户生成订单信息
@@ -81,7 +82,7 @@ type Commits struct {
 type AllCommit struct {
 	Gid       int         `json:"gid,omitempty" form:"gid"`
 	Introduce string      `json:"introduce,omitempty" form:"introduce"`
-	Onecomit  []OneCommit `json:"onecomit,omitempty" form:"onecomit"`
+	Onecomit  []OrmCommit `json:"onecomit,omitempty" form:"onecomit"`
 }
 
 //单条评论 用于 切片

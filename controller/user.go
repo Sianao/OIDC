@@ -22,7 +22,7 @@ func BalanceGet(c *gin.Context) {
 		return
 	}
 	user.BasicInfo = BasicInfo
-	balance, err := dao.GetBalance(user.Username)
+	balance, err := dao.GetBalance(user.BasicInfo)
 	if err != nil {
 		service.ErrorReturn(c, err.Error())
 		return

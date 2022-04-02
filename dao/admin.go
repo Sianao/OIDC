@@ -8,10 +8,6 @@ import (
 	"sync"
 	"time"
 
-	// "JD/utils"
-	// "JD/utils"
-	// "JD/utils"
-	"database/sql"
 	"errors"
 
 	"github.com/gin-gonic/gin"
@@ -19,79 +15,37 @@ import (
 
 func GetAllOrder() (*models.AllInfo, error) {
 	var AllInfo models.AllInfo
-	stm, err := DB.Prepare("select State from Order_state_type")
-	if err != nil {
-		err = errors.New("数据查询失败")
+	var types []string
+	result := DB.Table("Order_state_type").Find(&types)
+	if result.Error != nil {
+		err := errors.New("数据查询失败")
 		return nil, err
 	}
-	row, err := stm.Query()
-	if err != nil {
 
-		err = errors.New("数据查询失败")
-		return nil, err
+	for _, v := range types {
+		var all models.All
+		all.State = v
+		var one []models.OneOrder
+		DB.Table("user_order").Where("state=?", v).Find(&one)
+		all.Order = one
+		AllInfo.All = append(AllInfo.All, all)
+
 	}
-	var templeAll models.All
-	for row.Next() {
-		err := row.Scan(&templeAll.State)
-		if err != nil {
 
-			if err == sql.ErrNoRows {
-				//do nothing
-			} else {
-				err = errors.New("数据查询失败")
-
-				return nil, err
-			}
-		}
-		AllInfo.All = append(AllInfo.All, templeAll)
-	}
-	var OneOrder models.OneOrder
-	stm, err = DB.Prepare("select oid ,uid ,gid ,count from user_order where state=?")
-
-	if err != nil {
-		err = errors.New("数据查询失败")
-		return nil, err
-	}
-	for key, value := range AllInfo.All {
-		row, err = stm.Query(value.State)
-		if err != nil {
-
-			err = errors.New("数据查询失败")
-			return nil, err
-		}
-		for row.Next() {
-			err = row.Scan(&OneOrder.Oid, &OneOrder.Uid, &OneOrder.Gid, &OneOrder.Count)
-			if err != nil {
-
-				err = errors.New("数据查询失败")
-				return nil, err
-			}
-			AllInfo.All[key].Order = append(AllInfo.All[key].Order, OneOrder)
-		}
-	}
 	return &AllInfo, nil
 }
 func OrderChange(order models.UpdateUserOrder) (string, error) {
-	stm, err := DB.Prepare("select uid from user_order where oid=?")
-	if err != nil {
-		return "", err
-	}
 	var uid int
-	row, _ := stm.Query(order.Oid)
-	for row.Next() {
-		row.Scan(&uid)
+	result := DB.Table("user_order").Where("oid=?", order.Oid).Select("uid").Find(&uid)
+	if result.Error != nil {
+		err := errors.New("订单信息错误")
+		return "", err
 	}
 	utils.AddCategory(strconv.Itoa(order.Oid))
 	utils.Subscribe(uid, strconv.Itoa(order.Oid))
-	stm, err = DB.Prepare("update user_order set state =? where oid=?")
-	if err != nil {
-		err = errors.New("操作失败")
-		return "", err
-	}
-	_, err = stm.Exec(order.State, order.Oid)
-	if err != nil {
-
-		err = errors.New("操作失败")
+	result = DB.Table("user_order").Where("oid=?", order.Oid).Update("state", order.State)
+	if result.Error != nil {
+		err := errors.New("订单信息错误")
 		return "", err
 	}
 	t := time.Now()
@@ -99,55 +53,22 @@ func OrderChange(order models.UpdateUserOrder) (string, error) {
 	return "操作成功", nil
 }
 func DeleteUserOrder(update models.UpdateUserOrder) (string, error) {
-	stm, err := DB.Prepare("select state from user_order where oid=?")
-	if err != nil {
-		err = errors.New("用户信息错误")
-		return "", err
-	}
 	var state string
-	err = stm.QueryRow(update.Oid).Scan(&state)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			err = errors.New("订单不存在")
-			return "", err
-		}
-		err = errors.New("操作失败")
+	DB.Table("user_order").Select("state").Where("oid=?").Scan(&state)
+	if state != "已完成" {
+		err := errors.New("订单信息错误")
 		return "", err
 	}
-
-	stm, err = DB.Prepare("delete from user_order where oid =?")
-	if err != nil {
-		err = errors.New("用户信息错误")
+	result := DB.Delete(models.OrmUserOrder{}, "oid=?", update.Oid)
+	if result.Error != nil {
+		err := errors.New("订单信息删除错误")
 		return "", err
 	}
-	_, err = stm.Exec(update.Oid)
-	if err != nil {
-		err = errors.New("操作失败")
-		return "", err
-	}
-	return "操作成功", nil
+	return "", nil
 
 }
 func AddGoods(goods models.GoodsAdd, c *gin.Context) (string, error) {
-	tx, err := DB.Begin()
-	if err != nil {
-
-		err = errors.New("商品添添加失败 请重试")
-		return "", err
-	}
-	stm, err := tx.Prepare("insert into goods_info(introduce,price) values (?,?)")
-	if err != nil {
-
-		err = errors.New("商品添添加失败 请重试")
-		tx.Rollback()
-		return "", err
-		//err=errors.New("")
-	}
-	_, err = stm.Exec(goods.Introduce, goods.Price)
-	if err != nil {
-		err = errors.New("商品添添加失败 请重试")
-		return "", err
-	}
+	tx := DB.Begin()
 	url, err := utils.SaveFile(goods.Image, c)
 	if err != nil {
 
@@ -155,17 +76,22 @@ func AddGoods(goods models.GoodsAdd, c *gin.Context) (string, error) {
 		tx.Rollback()
 		return "", err
 	}
-	stm, err = tx.Prepare("insert into goods_list(name,url,type) values (?,?,?)")
-	if err != nil {
-
-		err = errors.New("商品添添加失败 请重试")
+	var onegood models.OrmGoodsLIst
+	onegood.Type = goods.Category
+	onegood.Url = url
+	onegood.Name = goods.Gname
+	result := tx.Create(&onegood)
+	if result.Error != nil {
+		tx.Rollback()
+		err := errors.New("添加失败")
 		return "", err
 	}
-	_, err = stm.Exec(goods.Gname, url, goods.Category)
-	if err != nil {
-
+	var one models.OrmGoodInfo
+	one.Introduce = goods.Introduce
+	one.Price = float64(int(goods.Price))
+	if result := tx.Create(&one); result.Error != nil {
+		err := errors.New("商品添加失败")
 		tx.Rollback()
-		err = errors.New("商品添添加失败 请重试")
 		return "", err
 	}
 	tx.Commit()
@@ -180,49 +106,29 @@ func UpdateGoods(goods models.UpdateGoods, c *gin.Context) (string, error) {
 		utils.AddNewInfo(strconv.Itoa(goods.Gid), "商品信息修改", "您关注的商品信息发生变动", t)
 		s.Done()
 	}()
-	tx, err := DB.Begin()
-	if err != nil {
-		err = errors.New("数据更新失败 请稍后重试")
-		return "", err
-	}
+	tx := DB.Begin()
+
 	if goods.Image != nil {
-		stm, err := DB.Prepare("select url from goods_list where Gid=?")
-		if err != nil {
+		var url string
+		result := DB.Table("goods_list").Select("url").Find(&url)
+		if result.Error != nil {
 
+			err := errors.New("数据更新失败 请稍后重试")
+			return "", err
+		}
+		err := os.Remove("/www/static/" + url)
+		if err != nil {
 			err = errors.New("数据更新失败 请稍后重试")
 			return "", err
 		}
-		var ToDelete string
-		err = stm.QueryRow(goods.Gid).Scan(&ToDelete)
+		url, err = utils.SaveFile(goods.Image, c)
 		if err != nil {
-
-			err = errors.New("数据更新失败 请稍后重试")
-			return "", err
-		}
-		err = os.Remove("/www/static/" + ToDelete)
-		if err != nil {
-
-			err = errors.New("数据更新失败 请稍后重试")
-			return "", err
-		}
-		url, err := utils.SaveFile(goods.Image, c)
-		if err != nil {
-
 			tx.Rollback()
 			err = errors.New("数据更新失败 请稍后重试")
 			return "", err
-			//err=errors.New("")
 		}
-		stm, err = tx.Prepare("update goods_list set url =? where Gid =?")
-		if err != nil {
-
-			err = errors.New("数据更新失败 请稍后重试")
-			tx.Rollback()
-			err = errors.New("数据更新失败 请稍后重试")
-		}
-		_, err = stm.Exec(url, goods.Gid)
-		if err != nil {
-
+		result = DB.Model(&models.OrmGoodsLIst{}).Where("Gid=?", goods.Gid).Update("url", url)
+		if result.Error != nil {
 			err = errors.New("数据更新失败 请稍后重试")
 			tx.Rollback()
 			return "", err
@@ -230,135 +136,66 @@ func UpdateGoods(goods models.UpdateGoods, c *gin.Context) (string, error) {
 		s.Wait()
 	}
 	if goods.Gname != "" {
-		stm, err := tx.Prepare("update goods_list set name =? where Gid=?")
-		if err != nil {
-
-			err = errors.New("数据更新失败 请稍后重试")
+		result := DB.Model(&models.OrmGoodsLIst{}).Where("Gid=?", goods.Gid).Update("name", goods.Gname)
+		if result.Error != nil {
+			err := errors.New("数据更新失败 请稍后重试")
 			tx.Rollback()
-			return "", err
-		}
-		_, err = stm.Exec(goods.Gname, goods.Gid)
-		if err != nil {
-
-			err = errors.New("数据更新失败 请稍后重试")
 			return "", err
 		}
 	}
 	if goods.Introduce != "" {
-		stm, err := tx.Prepare("update goods_info set introduce =? where Gid=?")
-		if err != nil {
-
-			err = errors.New("数据更新失败 请稍后重试")
+		result := DB.Model(&models.OrmGoodsLIst{}).Where("Gid=?", goods.Gid).Update("introduce", goods.Introduce)
+		if result.Error != nil {
+			err := errors.New("数据更新失败 请稍后重试")
 			tx.Rollback()
-			return "", err
-		}
-		_, err = stm.Exec(goods.Gname, goods.Gid)
-		if err != nil {
-
-			err = errors.New("数据更新失败 请稍后重试")
 			return "", err
 		}
 	}
 	if goods.Price != 0 {
-		stm, err := tx.Prepare("update goods_info set price =? where Gid=?")
-		if err != nil {
-
-			err = errors.New("数据更新失败 请稍后重试")
+		result := DB.Model(&models.OrmGoodsLIst{}).Where("Gid=?", goods.Gid).Update("price", &goods.Price)
+		if result.Error != nil {
+			err := errors.New("数据更新失败 请稍后重试")
 			tx.Rollback()
 			return "", err
 		}
-		_, err = stm.Exec(goods.Price, goods.Gid)
-		if err != nil {
-
-			err = errors.New("数据更新失败 请稍后重试")
-			return "", err
-		}
 	}
-	err = tx.Commit()
-	if err != nil {
-
-		err = errors.New("数据更新失败 请稍后重试")
-		tx.Rollback()
-		return "", err
-	}
+	tx.Commit()
 	return "小商品修改成功了哦", nil
 }
 
 func DeleteGoods(gid string) (string, error) {
-	tx, err := DB.Begin()
-	if err != nil {
+	tx := DB.Begin()
 
-		err = errors.New("商品删除失败 再试试吧")
-		tx.Rollback()
-		return "", err
-	}
 	//var wait sync.WaitGroup
+	result := DB.Delete(models.OrmCommit{}, "Gid=?", gid)
+	if result.Error != nil {
+		err := errors.New("商品删除失败 再试试吧")
+		tx.Rollback()
+		return "", err
+	}
+	result = DB.Delete(models.OrmShopChart{}, "gid=？", gid)
+	if result.Error != nil {
+		err := errors.New("商品删除失败 再试试吧")
+		tx.Rollback()
+		return "", err
+	}
+	result = DB.Delete(models.OrmGoodInfo{}, "Gid=?", gid)
+	if result.Error != nil {
+		err := errors.New("商品删除失败 再试试吧")
+		tx.Rollback()
+		return "", err
+	}
+	var url string
+	DB.Table("goods_list").Select("url").Where("Gid=?", gid).Scan(&url)
 
-	stm, err := DB.Prepare("delete from goods_commit where Gid=?")
+	err := os.Remove("/www/static/" + url)
 	if err != nil {
 		err = errors.New("商品删除失败 再试试吧")
 		tx.Rollback()
 		return "", err
 	}
-	_, err = stm.Exec(gid)
-	if err != nil {
-
-		err = errors.New("商品删除失败 再试试吧")
-		tx.Rollback()
-		return "", err
-	}
-	stm, err = tx.Prepare("delete from shop_chart where gid=?")
-	if err != nil {
-		err = errors.New("商品删除失败 再试试吧")
-		tx.Rollback()
-		return "", err
-	}
-	_, err = stm.Exec(gid)
-	if err != nil {
-
-		err = errors.New("商品删除失败 再试试吧")
-		tx.Rollback()
-		return "", err
-	}
-	stm, err = tx.Prepare("delete from goods_info where GId=?")
-	if err != nil {
-		err = errors.New("商品删除失败 再试试吧")
-		tx.Rollback()
-		return "", err
-	}
-	_, err = stm.Exec(gid)
-	if err != nil {
-
-		err = errors.New("商品删除失败 再试试吧")
-		tx.Rollback()
-		return "", err
-	}
-	stm, err = DB.Prepare("select url from goods_list where Gid =?")
-	var link string
-	if err != nil {
-
-		err = errors.New("商品删除失败 再试试吧")
-		tx.Rollback()
-		return "", err
-	}
-	err = stm.QueryRow(gid).Scan(&link)
-	err = os.Remove("/www/static/" + link)
-	if err != nil {
-
-		err = errors.New("商品删除失败 再试试吧")
-		tx.Rollback()
-		return "", err
-	}
-	stm, err = tx.Prepare("delete  from goods_list where Gid =?")
-	if err != nil {
-
-		err = errors.New("商品删除失败 再试试吧")
-		tx.Rollback()
-		return "", err
-	}
-	_, err = stm.Exec(gid)
-	if err != nil {
-
+	result = DB.Delete(models.OrmGoodsLIst{}, "Gid=?", gid)
+	if result.Error != nil {
 		err = errors.New("商品删除失败 再试试吧")
 		tx.Rollback()
 		return "", err

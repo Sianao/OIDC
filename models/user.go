@@ -4,18 +4,32 @@ import (
 	"mime/multipart"
 )
 
+func (IdToken) TableName() string {
+	return "user_info"
+}
+
 type IdToken struct {
-	User     string
-	Id       string
-	Phone    string
-	Balance  string
-	ImageUrl string
+	User     string `gorm:"name"`
+	Id       string `gorm:"-"`
+	Phone    string `gorm:"number"`
+	Balance  string `gorm:"balance"`
+	ImageUrl string `gorm:"image"`
+}
+
+type UserInfo struct {
+	Uid     int
+	HubId   int `gorm:"column:hub_id"`
+	Name    string
+	Word    string
+	Number  string
+	Balance float64
+	Image   string
 }
 
 // BasicInfo 用户基准信息 一般用于 token解析数据绑定
 type BasicInfo struct {
-	Uid      int
-	Username string
+	Uid      int    `gorm:"column:uid"`
+	Username string `gorm:"column:username"`
 }
 
 // Balance 用户余额充值
@@ -32,7 +46,7 @@ type User struct {
 // UserOrder 用户订单返回
 type UserOrder struct {
 	BasicInfo
-	Allorder []AllOrder
+	Allorder []OrmUserOrder
 }
 
 // AllOrder 单条订单
@@ -54,18 +68,18 @@ type UserImage struct {
 
 type MyInfo struct {
 	BasicInfo
-	Balance  float64
-	ImageUrl string
+	Balance  float64 `gorm:"column:balance"`
+	ImageUrl string  `gorm:"column:image"`
 	Category []Category
 }
 type AllOrder struct {
-	Gid   int
-	Oid   int
-	Count int
-	State string
+	Gid   int    `gorm:"gid"`
+	Oid   int    `gorm:"oid"`
+	Count int    `gorm:"count"`
+	State string `gorm:"state"`
 }
 
 type Category struct {
-	State string
+	State string `gorm:"column:State"`
 	Order []AllOrder
 }
